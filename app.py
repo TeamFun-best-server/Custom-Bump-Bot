@@ -165,7 +165,6 @@ async def setup(interaction: Interaction):
         return await interaction.response.send_message("❌ You need **Manage Server** permission or need to be added as Manager in this server to use this command.", ephemeral=True)
 
 
-    # 2️⃣ Selecteer een bump channel
     channel_view = ChannelSelectView(interaction)
     await interaction.response.send_message("📢 **Select a bump channel:**", view=channel_view, ephemeral=True)
     await channel_view.wait()
@@ -175,14 +174,11 @@ async def setup(interaction: Interaction):
 
     bump_channel = interaction.guild.get_channel(channel_view.selected_channel)
 
-    # 3️⃣ Controleer of de bot permissies heeft om daar berichten te sturen
     if not bump_channel.permissions_for(interaction.guild.me).send_messages:
         return await interaction.followup.send(f"❌ I don't have permission to send messages in <#{bump_channel.id}>. In order to set the server up, give me permission to talk in <#{bump_channel.id}>", ephemeral=True)
 
-    # 4️⃣ Opslaan van bump channel
     save_yaml(get_server_file(guild_id, "bumps"), {"channel": bump_channel.id})
 
-    # 5️⃣ Vraag om advertentie met knop
     ad_view = AdInputView(interaction)
     await interaction.followup.send("📝 **Click below to enter your advertisement:**", view=ad_view, ephemeral=True)
     await ad_view.wait()
@@ -190,10 +186,12 @@ async def setup(interaction: Interaction):
     if not ad_view.selected_ad:
         return await interaction.followup.send("❌ Setup cancelled (no advertisement provided).", ephemeral=True)
 
-    # 6️⃣ Opslaan van advertentie
     save_yaml(get_server_file(guild_id, "ad"), {"message": ad_view.selected_ad})
 
+    ad_view.stop() 
+
     await interaction.followup.send("✅ Setup completed successfully!", ephemeral=True)
+    
 bump_cooldowns = {}
 
 @bot.tree.command(name="bump", description="Send your advertisement to other servers.")
@@ -202,7 +200,6 @@ async def bump(interaction: Interaction):
     guild = interaction.guild
     guild_id = guild.id
 
-    # Check of de server is geblacklist
     if is_blacklisted(guild_id):
         return await interaction.response.send_message("⛔️ This server is blacklisted. Please contact the support team with '/support'.", ephemeral=True)
 
@@ -216,14 +213,12 @@ async def bump(interaction: Interaction):
             f"⏳ You must wait {remaining.seconds // 60} minutes before bumping again. Want faster cooldowns? Purchage premium", ephemeral=True
         )
 
-    # Laad advertentie en bump-kanaal
     ad_data = load_yaml(get_server_file(guild_id, "ad"))
     bump_data = load_yaml(get_server_file(guild_id, "bumps"))
 
     ad_message = ad_data.get("message")
     bump_channel_id = bump_data.get("channel")
 
-    # Controleer of het bump-kanaal geldig is
     if not bump_channel_id:
         return await interaction.response.send_message(
             "❌ No bump channel is set up. Use `/setup` first.", ephemeral=True
@@ -241,9 +236,8 @@ async def bump(interaction: Interaction):
             "❌ I don't have permission to send messages in the bump channel! In order to use the /bump command, please give me permission to talk in your bump channel.", ephemeral=True
         )
 
-    # Selecteer servers voor bump
     all_servers = [g for g in bot.guilds if g.id != guild_id]
-    random.shuffle(all_servers)  # Schud de lijst om willekeurig te kiezen
+    random.shuffle(all_servers) 
     target_servers = all_servers[:random.randint(50, 100)]
 
     sent_count = 0
@@ -260,19 +254,15 @@ async def bump(interaction: Interaction):
                 except discord.Forbidden:
                     print(f"❌ Cannot send message in {target_guild.name} (missing permissions)")
 
-        # Voorkom ratelimiting: wacht 10 seconden per 20 servers
         if (i + 1) % 20 == 0:
             await asyncio.sleep(10)
 
-    # Update cooldown
     bump_cooldowns[guild_id] = now + cooldown_time
 
-    # Update totaal aantal bumps
     total_bumps_data = load_yaml(get_server_file(guild_id, "total-bumps"))
     total_bumps = total_bumps_data.get("count", 0) + 1
     save_yaml(get_server_file(guild_id, "total-bumps"), {"count": total_bumps})
 
-    # Embed bevestiging
     embed = discord.Embed(
         title="✅ Successful Bump!",
         description=f"Thanks for using **XtremeBump** as your bump bot!\nYour advertisement was shared with **{sent_count} servers**.\nThis server has a total of **{total_bumps} bumps**!\n\nDid you know, you can get usefull commands by DMing me '!help'!",
@@ -285,8 +275,6 @@ async def bump(interaction: Interaction):
     except discord.errors.NotFound:
         await interaction.followup.send(embed=embed)
 
-
-# ✅ Helper functie om de managers op te slaan
 def get_managers(server_id):
     file_path = f"servers/{server_id}/special-managers.yml"
     if not os.path.exists(file_path):
@@ -329,7 +317,7 @@ async def removemanager(interaction: discord.Interaction, user: discord.User):
     if not guild:
         return await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
 
-    # Controleer of de gebruiker permissies heeft
+    # Check if the user has permission
     if not interaction.user.guild_permissions.manage_guild and interaction.user.id not in get_managers(guild.id):
         return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
 
@@ -343,7 +331,7 @@ async def removemanager(interaction: discord.Interaction, user: discord.User):
 
     await interaction.response.send_message(f"✅ {user.mention} has been removed as a manager!", ephemeral=False)
     
-# ✅ `/leaderboard` - Top 10 servers met meeste bumps
+# ✅ `/leaderboard`
 @bot.tree.command(name="leaderboard", description="Show the top 10 servers with the most bumps.")
 async def leaderboard(interaction: Interaction):
     if is_blacklisted(interaction.guild.id):
@@ -358,10 +346,10 @@ async def leaderboard(interaction: Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-# ✅ `/blacklist` - Blokkeert een server in het systeem
+# ✅ `/blacklist`
 @bot.tree.command(name="blacklist", description="Blacklist a server from using the bump system.")
 async def blacklist(interaction: Interaction, server_id: str):
-    allowed_users = [1198268147027955763, 9876543210]  # Jouw ID en die van een andere dev
+    allowed_users = [1198268147027955763, 9876543210]  
 
     if interaction.user.id not in allowed_users:
         return await interaction.response.send_message("⛔️ You do not have permission to use this command.", ephemeral=True)
@@ -372,7 +360,7 @@ async def blacklist(interaction: Interaction, server_id: str):
     guild_id = int(server_id)
     file_path = "blocked-servers.yml"
 
-    # Laad de blacklist en update het bestand
+    # Load blacklist
     blocked = load_yaml(file_path) or {"blacklisted": []}
     if guild_id not in blocked["blacklisted"]:
         blocked["blacklisted"].append(guild_id)
@@ -381,10 +369,10 @@ async def blacklist(interaction: Interaction, server_id: str):
     else:
         await interaction.response.send_message("⚠️ This server is already blacklisted.", ephemeral=True)
 
-# ✅ `/removeblacklist` - Haalt een server van de blacklist
+# ✅ `/removeblacklist`
 @bot.tree.command(name="removeblacklist", description="Remove a server from the blacklist.")
 async def remove_blacklist(interaction: Interaction, server_id: str):
-    allowed_users = [1198268147027955763, 9876543210]  # Jouw ID en die van een andere dev
+    allowed_users = [1198268147027955763, 9876543210]  # my id. and later some1 els?
 
     if interaction.user.id not in allowed_users:
         return await interaction.response.send_message("⛔️ You do not have permission to use this command.", ephemeral=True)
@@ -395,7 +383,7 @@ async def remove_blacklist(interaction: Interaction, server_id: str):
     guild_id = int(server_id)
     file_path = "blocked-servers.yml"
 
-    # Laad blacklist en verwijder de server
+    # Load the blacklist
     blocked = load_yaml(file_path) or {"blacklisted": []}
     if guild_id in blocked["blacklisted"]:
         blocked["blacklisted"].remove(guild_id)
@@ -404,7 +392,6 @@ async def remove_blacklist(interaction: Interaction, server_id: str):
     else:
         await interaction.response.send_message("⚠️ This server is not blacklisted.", ephemeral=True)
 
-# ✅ /premium met embed
 @bot.tree.command(name="premium", description="Get premium")
 async def premium(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -414,7 +401,6 @@ async def premium(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed)
 
-# ✅ /support met embed
 @bot.tree.command(name="support", description="Get the invite to our support server")
 async def support(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -427,7 +413,7 @@ async def support(interaction: discord.Interaction):
 
 @bot.tree.command(name="grand-premium", description="Grant a server premium status for a set number of days.")
 async def set_premium(interaction: Interaction, server_id: str, days: int):
-    allowed_users = [1198268147027955763, 9876543210]  # Voeg jouw ID's toe
+    allowed_users = [1198268147027955763, 9876543210]  
 
     if interaction.user.id not in allowed_users:
         return await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
@@ -435,7 +421,7 @@ async def set_premium(interaction: Interaction, server_id: str, days: int):
     if not server_id.isdigit():
         return await interaction.response.send_message("❌ Invalid server ID.", ephemeral=True)
 
-    guild_id = str(server_id)  # Opslaan als string voor consistentie in YAML
+    guild_id = str(server_id)  
     expiry_date = datetime.utcnow() + timedelta(days=days)
 
     premium_data = load_premium_data()
@@ -452,7 +438,7 @@ def is_premium(guild_id):
     guild_info = premium_data.get(str(guild_id))
 
     if not guild_info or "expires" not in guild_info:
-        return False  # Geen premium of geen vervaldatum
+        return False  
 
     expiry_str = guild_info["expires"]
     
@@ -460,14 +446,13 @@ def is_premium(guild_id):
         expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d %H:%M:%S")
         return expiry_date > datetime.utcnow()
     except ValueError:
-        return False  # Ongeldige datumwaarde voorkomt een crash
+        return False  
 
 
-# ✅ Vote links lijst (kan je later uitbreiden zonder code te wijzigen)
+# ✅
 VOTE_LINKS = [
     {"name": "DiscordBotList", "url": "https://discordbotlist.com/servers/xtremebump-support/upvote"},
-    # Voeg hier later extra links toe zoals:
-    # {"name": "Top.gg", "url": "https://top.gg/bot/123456789/vote"},
+    {"name": "Top.gg", "url": "https://top.gg/bot/1344683872159531090"},
 ]
 
 @bot.tree.command(name="vote", description="Vote for us!")
@@ -478,7 +463,6 @@ async def vote(interaction: Interaction):
         color=discord.Color.blue(),
     )
 
-    # ✅ Automatisch alle vote-links toevoegen aan de embed
     for link in VOTE_LINKS:
         embed.add_field(name=link["name"], value=f"[Click here to vote]({link['url']})", inline=False)
 
@@ -488,15 +472,14 @@ async def vote(interaction: Interaction):
 @bot.tree.command(name="get-id", description="Get the server ID from an invite link (Staff only)")
 @app_commands.describe(invite="The invite link to the server")
 async def get_id(interaction: discord.Interaction, invite: str):
-    # Controleer of de gebruiker staff is (pas de ID's aan)
-    staff_users = [1198268147027955763, 9876543210]  # Voeg hier jouw staff ID's toe
+    staff_users = [1198268147027955763, 9876543210]  # staff ID's
     if interaction.user.id not in staff_users:
         return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
 
-    # Verwijder 'discord.gg/' als dat er nog voor staat
+    # remove 'discord.gg/' if it is still there
     invite_code = invite.replace("https://discord.gg/", "").replace("discord.gg/", "")
 
-    # API request om de server-ID te krijgen
+    # API request to get server-id
     async with aiohttp.ClientSession() as session:
         async with session.get(f"https://discord.com/api/v10/invites/{invite_code}?with_counts=true") as resp:
             if resp.status == 200:
@@ -516,12 +499,12 @@ async def get_id(interaction: discord.Interaction, invite: str):
             
 import random
 
-@tasks.loop(minutes=90)  # Auto-bump elke 1,5 uur
+@tasks.loop(minutes=90)  # Auto-bump every 1,5 hour
 async def auto_bump():
-    premium_data = load_yaml("premium-servers.yml") or {}  # Laad premium servers
-    auto_bump_data = load_yaml("auto-bump.yml") or {}  # Opslag van bump data
+    premium_data = load_yaml("premium-servers.yml") or {}  # load premium servers
+    auto_bump_data = load_yaml("auto-bump.yml") or {}  # Storage of bump thingys
 
-    premium_servers = list(premium_data.keys())  # Alle premium servers ophalen
+    premium_servers = list(premium_data.keys())  # Load all the permium servers
 
     if not premium_servers:
         print("❌ Geen premium servers gevonden voor auto-bump.")
@@ -530,17 +513,17 @@ async def auto_bump():
     for guild_id in premium_servers:
         guild = bot.get_guild(int(guild_id))
         if not guild:
-            continue  # Bot zit niet meer in de server
+            continue  # Bot is not in the server anymore
 
         ad_data = load_yaml(get_server_file(guild.id, "ad"))
         ad_message = ad_data.get("message", "No advertisement set.")
 
-        # Kies willekeurig **100 andere servers** om de ad in te sturen
+        # Chose other servers to bump in 
         target_servers = random.sample(bot.guilds, min(100, len(bot.guilds)))
 
         for target_guild in target_servers:
             if str(target_guild.id) == str(guild.id):
-                continue  # Niet bumpen in de eigen server
+                continue  # Don't bump in own server
 
             bump_channel_id = load_yaml(get_server_file(target_guild.id, "bumps")).get("channel")
             if not bump_channel_id:
@@ -555,7 +538,7 @@ async def auto_bump():
                 print(f"✅ Auto-bumped in {target_guild.name}")
 
                 auto_bump_data[str(guild.id)] = {"last_bumped": datetime.now().isoformat()}
-                save_yaml("auto-bump.yml", auto_bump_data)  # Opslaan in auto-bump.yml
+                save_yaml("auto-bump.yml", auto_bump_data)  # save in auto-bump.yml
             except Exception as e:
                 print(f"❌ Failed to bump in {target_guild.name}: {e}")
                 
@@ -566,19 +549,19 @@ async def managerlist(interaction: Interaction):
     if not guild:
         return await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
 
-    # Rollen met "Manage Server" permissie
+    # Rols with 'Manage Server' permission
     manager_roles = [role for role in guild.roles if role.permissions.manage_guild]
     manager_roles_mentions = [role.mention for role in manager_roles] if manager_roles else ["None"]
 
-    # Individuele managers uit bestand
+    # Managers that are added by the Managers.
     managers_file = f"servers/{guild.id}/special-managers.yml"
     managers_data = load_yaml(managers_file) or {}
     manager_ids = managers_data.get("managers", [])
     
-    # Converteer IDs naar @mentions
+    # change ID's to @mentions
     manager_mentions = [guild.get_member(int(mid)).mention for mid in manager_ids if guild.get_member(int(mid))] if manager_ids else ["None"]
 
-    # Embed maken
+    # Embed
     embed = discord.Embed(title="📋 Server Managers", color=discord.Color.blue())
     embed.add_field(name="🔹 Roles with Manage Server", value="\n".join(manager_roles_mentions), inline=False)
     embed.add_field(name="🔸 Assigned Managers", value="\n".join(manager_mentions), inline=False)
@@ -588,20 +571,20 @@ async def managerlist(interaction: Interaction):
 
 @bot.event
 async def on_message(message):
-    if message.guild is None and message.author != bot.user:  # Alleen in DM's reageren
+    if message.guild is None and message.author != bot.user:  # Check if it is in a DM
         if message.content.startswith("!suggest "):
             suggestion = message.content[len("!suggest "):].strip()
             if not suggestion:
                 return await message.channel.send("❌ Please provide a valid suggestion.")
 
-            # Embed voor de support server
-            channel = bot.get_channel(1345363894146826241)  # ID van het suggestiekanaal
+            # Embed in the Support server
+            channel = bot.get_channel(1345363894146826241)  # ID of suggestion channel
             if channel:
                 embed = discord.Embed(title="New Suggestion", description=suggestion, color=discord.Color.blue())
                 embed.set_footer(text=f"Suggested by {message.author} ({message.author.id})")
                 await channel.send(embed=embed)
 
-            # Embed als reactie naar de gebruiker
+            # send a embed to the user.
             reply_embed = discord.Embed(
                 title="Suggestion Submitted!",
                 description="Thank you for your suggestion! Your suggestion has been posted in our Support server. It can be found here: https://discord.gg/Zb2pmrdgET",
@@ -609,12 +592,12 @@ async def on_message(message):
             )
             await message.channel.send(embed=reply_embed)
 
-    await bot.process_commands(message)  # Andere commando’s blijven werken
+    await bot.process_commands(message)  # Other CMD's keep working
     
 @bot.tree.command(name="check-premium", description="Check if a server has premium status.")
 async def check_premium(interaction: discord.Interaction, server_id: Optional[str] = None):
     if server_id is None:
-        server_id = str(interaction.guild.id)  # Gebruik de huidige server als geen ID is opgegeven
+        server_id = str(interaction.guild.id)  # Use the server where the command is sended from if ID is none
 
     premium_servers = load_yaml("premium-servers.yml") or {}
 
@@ -636,9 +619,9 @@ async def info_commands(interaction: Interaction):
 @bot.event
 async def on_message(message):
     if message.author.bot:
-        return  # Negeer berichten van andere bots
+        return  # Fuk other bots
 
-    if isinstance(message.channel, discord.DMChannel):  # Controleer of het een DM is
+    if isinstance(message.channel, discord.DMChannel):  # Check if it is in a DM
         if message.content.lower() == "!paidpromo":
             embed = discord.Embed(title="💰 Paid Promotion", description="Want to promote your server with a paid promo? Here’s how it works!", color=discord.Color.gold())
             embed.add_field(name="📢 What is a paid promo?", value="A paid promo let you host a giveaway in the support server. The members first need to join your server before they can win. This makes your server growth go INSANE!", inline=False)
@@ -658,7 +641,7 @@ async def on_message(message):
             await message.channel.send(embed=embed)
             print("!help us used.")
 
-    await bot.process_commands(message)  # Zorg ervoor dat andere commands blijven werken
+    await bot.process_commands(message)  # Make sure all the other commands keep working
 
 
 @bot.event
@@ -666,7 +649,7 @@ async def on_ready():
     await bot.tree.sync()
     print(f"commands synced!")
     if not auto_bump.is_running():
-        auto_bump.start()  # Start de auto-bump loop
+        auto_bump.start()  # Start the auto-bump loop
     print(f"Auto-bump started!")
     print(f"Bot is logged in as XtremeBump.")
 
