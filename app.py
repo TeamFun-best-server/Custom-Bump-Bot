@@ -12,13 +12,12 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 
-# Bot instellingen
+# Bot settings
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="/", intents=intents)
-OWNER_IDS = {1198268147027955763, 9876543210}  # Jouw ID's hier
-BUMP_LIMIT = 100  # Maximaal aantal servers waar een bump naartoe gaat
+OWNER_IDS = {1198268147027955763, 9876543210}  Bot owner ID/IDs here
+BUMP_LIMIT = 100  # Max servers where the bot will bump to
 
-# Mappen en bestanden automatisch aanmaken
 DATA_FOLDER = "servers"
 BLOCKLIST_FILE = "blocked-servers.yml"
 PREMIUM_FILE = "premium-servers.yml"
@@ -35,7 +34,7 @@ for file in [BLOCKLIST_FILE, PREMIUM_FILE]:
         with open(file, "w") as f:
             yaml.dump({}, f)
 
-# Laad YAML-bestanden
+# load yaml
 def load_yaml(filepath):
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
@@ -47,36 +46,35 @@ def get_bump_channel(guild_id):
     return data.get(str(guild_id), {}).get("channel", None)
 
 
-# Check of een server geblokkeerd is
+# check if the server is blocked
 def is_blacklisted(server_id):
     blocked_servers = load_yaml(BLOCKLIST_FILE)
     return str(server_id) in blocked_servers
 
-# ✅ Functie om YAML op te slaan (nu zonder fout)
+# function to save .yml
 def save_yaml(file_path, data):
     directory = os.path.dirname(file_path)
 
-    # Zorg dat de map correct wordt aangemaakt
+    # map make system
     if directory and not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)
 
     with open(file_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, default_flow_style=False)
 
-# 📂 Functie om het serverbestandspad te krijgen
 def get_server_file(guild_id, filename):
     return f"servers/{guild_id}/{filename}.yml"
 
 def load_premium_data():
     """ Laadt de premium server data uit premium-servers.yml. """
     if not os.path.exists(PREMIUM_FILE):
-        return {}  # Als het bestand niet bestaat, geef een lege dict terug
+        return {}  
 
     with open(PREMIUM_FILE, "r", encoding="utf-8") as file:
         try:
-            return yaml.safe_load(file) or {}  # Zorg dat we een dict terugkrijgen
+            return yaml.safe_load(file) or {} 
         except yaml.YAMLError:
-            return {}  # Voorkom crashes als het YAML-bestand corrupt is
+            return {}  # Prefent crashes when the file is corrupted
 
 def save_premium_data(data):
     """ Slaat de premium server data op in premium-servers.yml. """
@@ -94,7 +92,7 @@ class AdModal(discord.ui.Modal, title="📄 Enter Your Advertisement"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.ad_content = self.advertisement.value  # ✅ Opslaan als string
+        self.ad_content = self.advertisement.value 
         self.stop()
 
 
@@ -112,7 +110,7 @@ class AdInputView(discord.ui.View):
         modal = AdModal()
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.selected_ad = modal.ad_content  # ✅ Gebruik opgeslagen waarde
+        self.selected_ad = modal.ad_content 
         self.stop()
 
 
@@ -154,13 +152,10 @@ async def setup(interaction: Interaction):
     if not guild:
         return await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
 
-    # 1️⃣ Controleer of de server op de blacklist staat
     blocked_servers = load_yaml("blocked-servers.yml") or {"blacklisted": []}
     if guild_id in blocked_servers["blacklisted"]:
         return await interaction.response.send_message("⛔️ This server is blacklisted. Please contact the support team with '/support'!", ephemeral=True)
-    
-        # 🔒 Controleer of de gebruiker "Manage Server" permissie heeft
-    # Controleer of de gebruiker permissies heeft
+
     if not interaction.user.guild_permissions.manage_guild and interaction.user.id not in get_managers(guild.id):
         return await interaction.response.send_message("❌ You need **Manage Server** permission or need to be added as Manager in this server to use this command.", ephemeral=True)
 
