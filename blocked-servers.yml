@@ -1,0 +1,4 @@
+blacklisted:
+- 727741335158915175
+
+# example blacklist, add those with /blacklist <id> and remove with /removeblacklist
