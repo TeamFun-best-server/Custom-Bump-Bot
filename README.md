@@ -1,2 +1,1 @@
-# XtremeBump-Dev-Team
-Just to make XtremeBump better (;
+# Your Bump bot
